@@ -129,16 +129,28 @@ const SongRequestApp = () => {
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
+      {/* Sfondo gradiente */}
       <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full -z-10">
         <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 opacity-10 animate-gradient"></div>
         <div className="absolute inset-0 backdrop-blur-xl"></div>
       </div>
+
+      {/* Immagine decorativa */}
+      <div className="fixed bottom-0 right-0 w-48 h-64 -z-5 opacity-30 transition-opacity hover:opacity-40">
+        <img 
+          src="/images/dj-peppone.png" 
+          alt="DJ Peppone"
+          className="object-contain w-full h-full"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
+      </div>
       
+      {/* Header con nuovo titolo */}
       <div className="text-center pt-8 pb-6 px-4">
         <div className="relative inline-block">
           <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            DJ Request Line
+            Peppone's Hits on Demand
           </h1>
           <Sparkles className="absolute -top-6 -right-6 text-yellow-500 animate-bounce" size={24} />
         </div>

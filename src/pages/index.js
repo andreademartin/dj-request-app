@@ -9,8 +9,8 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>DJ Request Line</title>
-        <meta name="description" content="App per richieste musicali" />
+        <title>Peppone's Hits on Demand</title>
+        <meta name="description" content="Richiedi le tue canzoni preferite al DJ Peppone" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
