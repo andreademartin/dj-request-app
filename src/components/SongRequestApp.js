@@ -370,11 +370,58 @@ const SongRequestApp = () => {
         </div>
       )}
 
-      <DeleteConfirmDialog 
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
-        onConfirm={deleteSong}
-      />
+const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <div 
+        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      >
+        <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
+          <AlertTriangle className="mr-2 text-orange-500" size={24} />
+          Conferma eliminazione
+        </h2>
+        <p className="text-gray-600 mb-6">
+          Sei sicuro di voler eliminare questa canzone dalla lista delle richieste?
+        </p>
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
+            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+          >
+            Ti piacerebbe
+          </button>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onConfirm();
+            }}
+            className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
+          >
+            Sto cazzo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
       <style jsx global>{`
         @keyframes gradient {
