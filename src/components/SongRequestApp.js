@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle } from 'lucide-react';
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update, remove } from '../utils/firebase';
 
@@ -11,25 +11,13 @@ const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
     e.stopPropagation();
   };
 
-  const handleConfirm = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onConfirm();
-  };
-
-  const handleClose = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onClose();
-  };
-
   return (
     <div 
-      className="fixed inset-0 flex items-center justify-center z-[200] bg-black/50"
-      onClick={handleClose}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]"
+      onClick={onClose}
     >
       <div 
-        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl relative"
+        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl"
         onClick={handleClick}
       >
         <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
@@ -41,16 +29,16 @@ const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
         </p>
         <div className="flex justify-end space-x-3">
           <button
-            onClick={handleClose}
+            onClick={onClose}
             className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
           >
-            Annulla
+            Ti piacerebbe
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={onConfirm}
             className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
           >
-            Elimina
+            Sto cazzo
           </button>
         </div>
       </div>
@@ -85,8 +73,7 @@ const SongRequestApp = () => {
       if (data) {
         const requestsArray = Object.entries(data).map(([key, value]) => ({
           ...value,
-          firebaseKey: key,
-          order: value.order || 0
+          firebaseKey: key
         }));
         setRequests(requestsArray);
       } else {
@@ -127,58 +114,25 @@ const SongRequestApp = () => {
     return () => clearTimeout(timeoutId);
   }, [search, accessToken]);
 
-  const moveSong = useCallback(async (firebaseKey, direction) => {
-    const songs = [...requests];
-    const currentSong = songs.find(s => s.firebaseKey === firebaseKey);
-    if (!currentSong || currentSong.played) return;
-
-    const unplayedSongs = songs
-      .filter(s => !s.played)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-
-    const currentIndex = unplayedSongs.findIndex(s => s.firebaseKey === firebaseKey);
-    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-
-    if (targetIndex < 0 || targetIndex >= unplayedSongs.length) return;
-
-    const targetSong = unplayedSongs[targetIndex];
-    const currentOrder = currentSong.order || 0;
-    const targetOrder = targetSong.order || 0;
-
-    const updates = {};
-    updates[`/requests/${currentSong.firebaseKey}/order`] = targetOrder;
-    updates[`/requests/${targetSong.firebaseKey}/order`] = currentOrder;
-
-    try {
-      await update(ref(database), updates);
-    } catch (error) {
-      console.error('Errore nello spostamento:', error);
-    }
-  }, [requests]);
-
-  const handleDelete = useCallback((firebaseKey, e) => {
+  const handleDelete = (firebaseKey, e) => {
     e.preventDefault();
     e.stopPropagation();
     setDeleteDialog({ isOpen: true, songKey: firebaseKey });
-  }, []);
+  };
 
-  const deleteSong = useCallback(async () => {
+  const deleteSong = async () => {
     if (!deleteDialog.songKey) return;
-    
     try {
-      // Riferimento diretto al record da eliminare
       const songRef = ref(database, `requests/${deleteDialog.songKey}`);
-      console.log('Deleting song with key:', deleteDialog.songKey); // Per debug
       await remove(songRef);
-      console.log('Song deleted successfully'); // Per debug
     } catch (error) {
-      console.error('Error deleting song:', error);
+      console.error('Errore nella cancellazione:', error);
     } finally {
       setDeleteDialog({ isOpen: false, songKey: null });
     }
-  }, [deleteDialog.songKey]);
+  };
 
-  const toggleSongStatus = useCallback(async (firebaseKey, e) => {
+  const toggleSongStatus = async (firebaseKey, e) => {
     e.preventDefault();
     e.stopPropagation();
     const songRef = ref(database, `requests/${firebaseKey}`);
@@ -186,7 +140,7 @@ const SongRequestApp = () => {
     if (song) {
       await update(songRef, { played: !song.played });
     }
-  }, [requests]);
+  };
 
   const loadMore = () => {
     const nextPage = page + 1;
@@ -203,13 +157,11 @@ const SongRequestApp = () => {
       return;
     }
 
-    const maxOrder = Math.max(0, ...requests.filter(r => !r.played).map(r => r.order || 0));
     const requestsRef = ref(database, 'requests');
     await push(requestsRef, {
       ...song,
       played: false,
-      timestamp: Date.now(),
-      order: maxOrder + 1
+      timestamp: Date.now()
     });
 
     setSearch('');
@@ -226,11 +178,8 @@ const SongRequestApp = () => {
 
   const sortedRequests = [...requests].sort((a, b) => {
     if (a.played !== b.played) return a.played ? 1 : -1;
-    if (!a.played && !b.played) return (a.order || 0) - (b.order || 0);
     return (b.timestamp || 0) - (a.timestamp || 0);
   });
-
-  const unplayedSongs = requests.filter(r => !r.played);
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
@@ -239,16 +188,6 @@ const SongRequestApp = () => {
         <div className="absolute inset-0 backdrop-blur-xl"></div>
       </div>
 
-      {/* Immagine decorativa */}
-      <div className="fixed bottom-0 right-0 w-48 h-64 -z-5 opacity-30 transition-opacity hover:opacity-40">
-        <img 
-          src="/images/dj-peppone.png" 
-          alt="DJ Peppone"
-          className="object-contain w-full h-full"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
-      </div>
-      
       <div className="text-center pt-8 pb-6 px-4">
         <div className="relative inline-block">
           <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
@@ -322,7 +261,7 @@ const SongRequestApp = () => {
             </div>
           ) : (
             <div className="space-y-3">
-              {sortedRequests.map((song, index) => (
+              {sortedRequests.map((song) => (
                 <div
                   key={song.firebaseKey}
                   className={`flex items-center p-3 bg-white/80 rounded-xl shadow-sm border border-purple-100 transform transition-all duration-300 hover:scale-102 hover:shadow-md ${
@@ -335,28 +274,28 @@ const SongRequestApp = () => {
                     <div className="text-sm text-purple-600">{song.artist}</div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-  <div className="text-sm text-purple-400">
-    {formatDuration(song.duration)}
-  </div>
-  <div className="flex items-center space-x-2">
-    <button 
-      onClick={(e) => toggleSongStatus(song.firebaseKey, e)}
-      className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
-    >
-      {song.played ? (
-        <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
-      ) : (
-        <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
-      )}
-    </button>
-    <button 
-      onClick={(e) => handleDelete(song.firebaseKey, e)}
-      className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
-    >
-      <X size={20} />
-    </button>
-  </div>
-</div>
+                    <div className="text-sm text-purple-400">
+                      {formatDuration(song.duration)}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button 
+                        onClick={(e) => toggleSongStatus(song.firebaseKey, e)}
+                        className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
+                      >
+                        {song.played ? (
+                          <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+                        ) : (
+                          <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+                        )}
+                      </button>
+                      <button 
+                        onClick={(e) => handleDelete(song.firebaseKey, e)}
+                        className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -370,58 +309,11 @@ const SongRequestApp = () => {
         </div>
       )}
 
-const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]"
-      onClick={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }}
-    >
-      <div 
-        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-        }}
-      >
-        <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
-          <AlertTriangle className="mr-2 text-orange-500" size={24} />
-          Conferma eliminazione
-        </h2>
-        <p className="text-gray-600 mb-6">
-          Sei sicuro di voler eliminare questa canzone dalla lista delle richieste?
-        </p>
-        <div className="flex justify-end space-x-3">
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-            }}
-            className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-          >
-            Ti piacerebbe
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onConfirm();
-            }}
-            className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
-          >
-            Sto cazzo
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
+      <DeleteConfirmDialog 
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
+        onConfirm={deleteSong}
+      />
 
       <style jsx global>{`
         @keyframes gradient {
