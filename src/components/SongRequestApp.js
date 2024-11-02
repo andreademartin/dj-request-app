@@ -166,10 +166,13 @@ const SongRequestApp = () => {
     if (!deleteDialog.songKey) return;
     
     try {
+      // Riferimento diretto al record da eliminare
       const songRef = ref(database, `requests/${deleteDialog.songKey}`);
+      console.log('Deleting song with key:', deleteDialog.songKey); // Per debug
       await remove(songRef);
+      console.log('Song deleted successfully'); // Per debug
     } catch (error) {
-      console.error('Errore nella cancellazione:', error);
+      console.error('Error deleting song:', error);
     } finally {
       setDeleteDialog({ isOpen: false, songKey: null });
     }
@@ -332,54 +335,28 @@ const SongRequestApp = () => {
                     <div className="text-sm text-purple-600">{song.artist}</div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <div className="text-sm text-purple-400">
-                      {formatDuration(song.duration)}
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {!song.played && (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              moveSong(song.firebaseKey, 'up');
-                            }}
-                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors"
-                            disabled={index === unplayedSongs.findIndex(s => s.firebaseKey === song.firebaseKey)}
-                          >
-                            <ChevronUp size={16} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              moveSong(song.firebaseKey, 'down');
-                            }}
-                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors"
-                            disabled={index === unplayedSongs.length - 1}
-                          >
-                            <ChevronDown size={16} />
-                          </button>
-                        </>
-                      )}
-                      <button 
-                        onClick={(e) => toggleSongStatus(song.firebaseKey, e)}
-                        className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
-                      >
-                        {song.played ? (
-                          <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
-                        ) : (
-                          <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
-                        )}
-                      </button>
-                      <button 
-                        onClick={(e) => handleDelete(song.firebaseKey, e)}
-                        className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
-                      >
-                        <X size={20} />
-                      </button>
-                    </div>
-                  </div>
+  <div className="text-sm text-purple-400">
+    {formatDuration(song.duration)}
+  </div>
+  <div className="flex items-center space-x-2">
+    <button 
+      onClick={(e) => toggleSongStatus(song.firebaseKey, e)}
+      className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
+    >
+      {song.played ? (
+        <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+      ) : (
+        <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+      )}
+    </button>
+    <button 
+      onClick={(e) => handleDelete(song.firebaseKey, e)}
+      className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
+    >
+      <X size={20} />
+    </button>
+  </div>
+</div>
                 </div>
               ))}
             </div>
