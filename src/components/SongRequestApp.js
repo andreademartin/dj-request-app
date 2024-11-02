@@ -3,13 +3,28 @@ import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, 
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update, remove } from '../utils/firebase';
 
-// Componente Dialog semplificato
 const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
   if (!isOpen) return null;
 
+  const handleConfirm = (e) => {
+    e.stopPropagation();
+    onConfirm();
+  };
+
+  const handleClose = (e) => {
+    e.stopPropagation();
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
-      <div className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl animate-scale-up">
+    <div 
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
+      onClick={handleClose}
+    >
+      <div 
+        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl animate-scale-up"
+        onClick={e => e.stopPropagation()}
+      >
         <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
           <AlertTriangle className="mr-2 text-orange-500" size={24} />
           Conferma eliminazione
@@ -19,13 +34,13 @@ const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
         </p>
         <div className="flex justify-end space-x-3">
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
           >
             Annulla
           </button>
           <button
-            onClick={onConfirm}
+            onClick={handleConfirm}
             className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white transition-colors"
           >
             Elimina
@@ -103,6 +118,49 @@ const SongRequestApp = () => {
     return () => clearTimeout(timeoutId);
   }, [search, accessToken]);
 
+  const moveSong = async (firebaseKey, direction) => {
+    const currentSong = requests.find(r => r.firebaseKey === firebaseKey);
+    if (!currentSong || currentSong.played) return;
+
+    const unplayedSongs = requests
+      .filter(s => !s.played)
+      .sort((a, b) => a.order - b.order);
+
+    const currentIndex = unplayedSongs.findIndex(s => s.firebaseKey === firebaseKey);
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (swapIndex < 0 || swapIndex >= unplayedSongs.length) return;
+
+    const updates = {};
+    const newOrder = unplayedSongs[swapIndex].order;
+    const currentOrder = currentSong.order;
+
+    updates[`requests/${firebaseKey}/order`] = newOrder;
+    updates[`requests/${unplayedSongs[swapIndex].firebaseKey}/order`] = currentOrder;
+
+    try {
+      await update(ref(database), updates);
+    } catch (error) {
+      console.error('Errore nello spostamento:', error);
+    }
+  };
+
+  const deleteSong = async () => {
+    try {
+      if (!deleteDialog.songKey) return;
+      const songRef = ref(database, `requests/${deleteDialog.songKey}`);
+      await remove(songRef);
+      setDeleteDialog({ isOpen: false, songKey: null });
+    } catch (error) {
+      console.error('Errore nella cancellazione:', error);
+    }
+  };
+
+  const handleDelete = (firebaseKey, e) => {
+    e.stopPropagation();
+    setDeleteDialog({ isOpen: true, songKey: firebaseKey });
+  };
+
   const loadMore = () => {
     const nextPage = page + 1;
     const start = 5 * (nextPage - 1);
@@ -119,36 +177,6 @@ const SongRequestApp = () => {
     if (song) {
       await update(songRef, { played: !song.played });
     }
-  };
-
-  const deleteSong = async (firebaseKey) => {
-    const songRef = ref(database, `requests/${firebaseKey}`);
-    await remove(songRef);
-    setDeleteDialog({ isOpen: false, songKey: null });
-  };
-
-  const handleDelete = (firebaseKey) => {
-    setDeleteDialog({ isOpen: true, songKey: firebaseKey });
-  };
-
-  const moveSong = async (firebaseKey, direction) => {
-    const currentSong = requests.find(r => r.firebaseKey === firebaseKey);
-    if (!currentSong || currentSong.played) return;
-
-    const unplayedSongs = requests.filter(s => !s.played)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
-    
-    const currentIndex = unplayedSongs.findIndex(s => s.firebaseKey === firebaseKey);
-    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-
-    if (newIndex < 0 || newIndex >= unplayedSongs.length) return;
-
-    const updates = {};
-    updates[`requests/${firebaseKey}/order`] = unplayedSongs[newIndex].order;
-    updates[`requests/${unplayedSongs[newIndex].firebaseKey}/order`] = currentSong.order;
-
-    const dbRef = ref(database);
-    await update(dbRef, updates);
   };
 
   const addRequest = async (song) => {
@@ -293,93 +321,93 @@ const SongRequestApp = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       {!song.played && (
-                        <>
+                        <div className="flex items-center">
                           <button
                             onClick={() => moveSong(song.firebaseKey, 'up')}
                             className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
                             disabled={index === 0 || requests.filter(r => !r.played)[0].firebaseKey === song.firebaseKey}
-                          >
-                            <ChevronUp size={16} />
-                          </button>
-                          <button
-                            onClick={() => moveSong(song.firebaseKey, 'down')}
-                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
-                            disabled={index === requests.filter(r => !r.played).length - 1}
-                          >
-                            <ChevronDown size={16} />
-                          </button>
-                        </>
-                      )}
-   <button 
-                        onClick={() => toggleSongStatus(song.firebaseKey)}
-                        className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
-                      >
-                        {song.played ? (
-                          <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
-                        ) : (
-                          <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+                            >
+                              <ChevronUp size={16} />
+                            </button>
+                            <button
+                              onClick={() => moveSong(song.firebaseKey, 'down')}
+                              className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
+                              disabled={index === requests.filter(r => !r.played).length - 1}
+                            >
+                              <ChevronDown size={16} />
+                            </button>
+                          </div>
                         )}
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(song.firebaseKey)}
-                        className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
-                      >
-                        <X size={20} />
-                      </button>
+                        <button 
+                          onClick={(e) => toggleSongStatus(song.firebaseKey)}
+                          className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
+                        >
+                          {song.played ? (
+                            <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+                          ) : (
+                            <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+                          )}
+                        </button>
+                        <button 
+                          onClick={(e) => handleDelete(song.firebaseKey, e)}
+                          className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
+                        >
+                          <X size={20} />
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
+  
+        {showAddAnimation && (
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
+          </div>
+        )}
+  
+        <DeleteConfirmDialog 
+          isOpen={deleteDialog.isOpen}
+          onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
+          onConfirm={deleteSong}
+        />
+  
+        <style jsx global>{`
+          @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          
+          .animate-gradient {
+            background-size: 200% 200%;
+            animation: gradient 15s ease infinite;
+          }
+          
+          .animate-scale-up {
+            animation: scale-up 0.5s ease-out forwards;
+          }
+          
+          @keyframes scale-up {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 0; }
+          }
+          
+          .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+          }
+          
+          @keyframes fade-in {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
       </div>
-
-      {showAddAnimation && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-          <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
-        </div>
-      )}
-
-      <DeleteConfirmDialog 
-        isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
-        onConfirm={() => deleteSong(deleteDialog.songKey)}
-      />
-
-      <style jsx global>{`
-        @keyframes gradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        
-        .animate-gradient {
-          background-size: 200% 200%;
-          animation: gradient 15s ease infinite;
-        }
-        
-        .animate-scale-up {
-          animation: scale-up 0.5s ease-out forwards;
-        }
-        
-        @keyframes scale-up {
-          0% { transform: scale(0); opacity: 0; }
-          70% { transform: scale(1.2); opacity: 0.7; }
-          100% { transform: scale(1); opacity: 0; }
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out forwards;
-        }
-        
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </div>
-  );
-};
-
-export default SongRequestApp;
+    );
+  };
+  
+  export default SongRequestApp;
