@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3 } from 'lucide-react';
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update } from '../utils/firebase';
+import { DndProvider, useDrag, useDrop } from 'react-dnd';
+import { HTML5Backend } from 'react-dnd-html5-backend';
 
 const SongRequestApp = () => {
   const [search, setSearch] = useState('');
@@ -14,7 +16,6 @@ const SongRequestApp = () => {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
 
-  // Ottieni il token all'avvio
   useEffect(() => {
     const initSpotify = async () => {
       const token = await getSpotifyToken();
@@ -23,7 +24,6 @@ const SongRequestApp = () => {
     initSpotify();
   }, []);
 
-  // Sincronizza con Firebase
   useEffect(() => {
     const requestsRef = ref(database, 'requests');
     onValue(requestsRef, (snapshot) => {
@@ -38,7 +38,6 @@ const SongRequestApp = () => {
     });
   }, []);
 
-  // Gestisce la ricerca
   useEffect(() => {
     const searchSongs = async () => {
       if (search.length > 2 && accessToken) {
@@ -98,6 +97,13 @@ const SongRequestApp = () => {
     }
   };
 
+  const deleteRequest = async (firebaseKey) => {
+    if (window.confirm("Sei sicuro di voler eliminare questa richiesta?")) {
+      const songRef = ref(database, `requests/${firebaseKey}`);
+      await songRef.remove();
+    }
+  };
+
   const addRequest = async (song) => {
     if (requests.some(req => req.id === song.id)) {
       return;
@@ -122,54 +128,52 @@ const SongRequestApp = () => {
     return `${minutes}:${seconds.padStart(2, '0')}`;
   };
 
-  const sortedRequests = [...requests].sort((a, b) => {
-    if (a.played !== b.played) return a.played ? 1 : -1;
-    return (b.timestamp || 0) - (a.timestamp || 0);
-  });
+  const moveRequest = (dragIndex, hoverIndex) => {
+    const updatedRequests = [...requests];
+    const [draggedSong] = updatedRequests.splice(dragIndex, 1);
+    updatedRequests.splice(hoverIndex, 0, draggedSong);
+    setRequests(updatedRequests);
+  };
+
+  const sortedRequests = [...requests]
+    .filter(request => !request.played)
+    .concat([...requests].filter(request => request.played))
+    .sort((a, b) => (a.played - b.played) || (b.timestamp - a.timestamp));
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
-      {/* Sfondo gradiente */}
-      <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 opacity-10 animate-gradient"></div>
-        <div className="absolute inset-0 backdrop-blur-xl"></div>
-      </div>
-
-      {/* Immagine decorativa */}
-      <div className="fixed bottom-0 right-0 w-48 h-64 -z-5 opacity-30 transition-opacity hover:opacity-40">
-        <img 
-          src="/images/dj-peppone.png" 
-          alt="DJ Peppone"
-          className="object-contain w-full h-full"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
-      </div>
-      
-      {/* Header con nuovo titolo */}
-      <div className="text-center pt-8 pb-6 px-4">
-        <div className="relative inline-block">
-          <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Peppone&apos;s Hits on Demand
-          </h1>
-          <Sparkles className="absolute -top-6 -right-6 text-yellow-500 animate-bounce" size={24} />
+    <DndProvider backend={HTML5Backend}>
+      <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
+        <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full -z-10">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500 via-pink-500 to-orange-500 opacity-10 animate-gradient"></div>
+          <div className="absolute inset-0 backdrop-blur-xl"></div>
         </div>
-        <p className="text-gray-600 animate-fade-in">Richiedi la tua canzone preferita! 🎵</p>
-      </div>
 
-      <div className="max-w-md mx-auto p-4 space-y-6">
-        <div className="relative z-50">
-          <div className="relative transform transition-all duration-300 hover:scale-102">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 text-purple-400" size={20} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cerca una canzone su Spotify..."
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-lg text-purple-900 placeholder-purple-400"
-              />
-            </div>
+        <div className="fixed bottom-0 right-0 w-48 h-64 -z-5 opacity-30 transition-opacity hover:opacity-40">
+          <img src="/images/dj-peppone.png" alt="DJ Peppone" className="object-contain w-full h-full" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
+        </div>
+        
+        <div className="text-center pt-8 pb-6 px-4">
+          <div className="relative inline-block">
+            <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+              Peppone&apos;s Hits on Demand
+            </h1>
+            <Sparkles className="absolute -top-6 -right-6 text-yellow-500 animate-bounce" size={24} />
+          </div>
+          <p className="text-gray-600 animate-fade-in">Richiedi la tua canzone preferita! 🎵</p>
+        </div>
+
+        <div className="max-w-md mx-auto p-4 space-y-6">
+          <div className="relative z-50">
+            <Search className="absolute left-3 top-3 text-purple-400" size={20} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cerca una canzone su Spotify..."
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-lg text-purple-900 placeholder-purple-400"
+            />
 
             {suggestions.length > 0 && (
               <div className="absolute w-full mt-2 bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-purple-100 z-50 overflow-hidden animate-fade-in">
@@ -180,18 +184,12 @@ const SongRequestApp = () => {
                       className="flex items-center p-3 hover:bg-purple-50 cursor-pointer transition-all duration-300"
                       onClick={() => addRequest(song)}
                     >
-                      <img 
-                        src={song.cover} 
-                        alt={song.title} 
-                        className="w-12 h-12 rounded-lg shadow-sm object-cover"
-                      />
+                      <img src={song.cover} alt={song.title} className="w-12 h-12 rounded-lg shadow-sm object-cover" />
                       <div className="ml-3 flex-1">
                         <div className="font-medium text-purple-900">{song.title}</div>
                         <div className="text-sm text-purple-600">{song.artist}</div>
                       </div>
-                      <div className="text-sm text-purple-400">
-                        {formatDuration(song.duration)}
-                      </div>
+                      <div className="text-sm text-purple-400">{formatDuration(song.duration)}</div>
                     </div>
                   ))}
                   {hasMore && (
@@ -206,109 +204,135 @@ const SongRequestApp = () => {
               </div>
             )}
           </div>
+
+          <div className="relative z-40 bg-white/60 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-purple-100">
+            <h2 className="text-xl font-semibold mb-4 flex items-center text-purple-900">
+              <Clock className="mr-2 text-purple-500" size={24} />
+              Richieste in coda
+            </h2>
+
+            {sortedRequests.length === 0 ? (
+              <div className="text-center py-8 text-purple-600">
+                <Music2 className="mx-auto mb-2 animate-pulse" size={40} />
+                <p>Nessuna richiesta ancora...</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sortedRequests.map((song, index) => (
+                  <DraggableRequest
+                    key={song.firebaseKey}
+                    song={song}
+                    index={index}
+                    moveRequest={moveRequest}
+                    toggleSongStatus={toggleSongStatus}
+                    deleteRequest={deleteRequest}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="relative z-40 bg-white/60 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-purple-100">
-          <h2 className="text-xl font-semibold mb-4 flex items-center text-purple-900">
-            <Clock className="mr-2 text-purple-500" size={24} />
-            Richieste in coda
-          </h2>
+        {showAddAnimation && (
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+            <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
+          </div>
+        )}
+
+        <style jsx global>{`
+          @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
           
-          {sortedRequests.length === 0 ? (
-            <div className="text-center py-8 text-purple-600">
-              <Music2 className="mx-auto mb-2 animate-pulse" size={40} />
-              <p>Nessuna richiesta ancora...</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {sortedRequests.map((song) => (
-                <div
-                  key={song.firebaseKey}
-                  className={`flex items-center p-3 bg-white/80 rounded-xl shadow-sm border border-purple-100 transform transition-all duration-300 hover:scale-102 hover:shadow-md ${
-                    song.played ? 'opacity-60' : ''
-                  }`}
-                >
-                  <img src={song.cover} alt={song.title} className="w-12 h-12 rounded-lg shadow-sm object-cover" />
-                  <div className="ml-3 flex-1">
-                    <div className="font-medium text-purple-900">{song.title}</div>
-                    <div className="text-sm text-purple-600">{song.artist}</div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <div className="text-sm text-purple-400">
-                      {formatDuration(song.duration)}
-                    </div>
-                    <button 
-                      onClick={() => toggleSongStatus(song.firebaseKey)}
-                      className="focus:outline-none"
-                    >
-                      {song.played ? (
-                        <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
-                      ) : (
-                        <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          .animate-gradient {
+            background-size: 200% 200%;
+            animation: gradient 15s ease infinite;
+          }
+          
+          .animate-scale-up {
+            animation: scale-up 0.5s ease-out forwards;
+          }
+          
+          @keyframes scale-up {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.2); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 0; }
+          }
+          
+          .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+          }
+          
+          @keyframes fade-in {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+          ::-webkit-scrollbar {
+            width: 8px;
+          }
+
+          ::-webkit-scrollbar-track {
+            background: transparent;
+          }
+
+          ::-webkit-scrollbar-thumb {
+            background-color: rgba(139, 92, 246, 0.3);
+            border-radius: 20px;
+          }
+
+          ::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(139, 92, 246, 0.5);
+          }
+        `}</style>
       </div>
+    </DndProvider>
+  );
+};
 
-      {showAddAnimation && (
-        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-          <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
-        </div>
-      )}
+const DraggableRequest = ({ song, index, moveRequest, toggleSongStatus, deleteRequest }) => {
+  const [, ref] = useDrag({
+    type: 'REQUEST',
+    item: { index },
+  });
 
-      <style jsx global>{`
-        @keyframes gradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-        
-        .animate-gradient {
-          background-size: 200% 200%;
-          animation: gradient 15s ease infinite;
-        }
-        
-        .animate-scale-up {
-          animation: scale-up 0.5s ease-out forwards;
-        }
-        
-        @keyframes scale-up {
-          0% { transform: scale(0); opacity: 0; }
-          70% { transform: scale(1.2); opacity: 0.7; }
-          100% { transform: scale(1); opacity: 0; }
-        }
-        
-        .animate-fade-in {
-          animation: fade-in 0.3s ease-out forwards;
-        }
-        
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(-10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
+  const [, drop] = useDrop({
+    accept: 'REQUEST',
+    hover: (item) => {
+      if (item.index !== index) {
+        moveRequest(item.index, index);
+        item.index = index;
+      }
+    },
+  });
 
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-          background-color: rgba(139, 92, 246, 0.3);
-          border-radius: 20px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(139, 92, 246, 0.5);
-        }
-      `}</style>
+  return (
+    <div ref={(node) => ref(drop(node))} className={`flex items-center p-3 bg-white/80 rounded-xl shadow-sm border border-purple-100 transform transition-all duration-300 hover:scale-102 hover:shadow-md ${song.played ? 'opacity-60' : ''}`}>
+      <img src={song.cover} alt={song.title} className="w-12 h-12 rounded-lg shadow-sm object-cover" />
+      <div className="ml-3 flex-1">
+        <div className="font-medium text-purple-900">{song.title}</div>
+        <div className="text-sm text-purple-600">{song.artist}</div>
+      </div>
+      <div className="flex flex-col items-end gap-2">
+        <div className="text-sm text-purple-400">{formatDuration(song.duration)}</div>
+        <button onClick={() => toggleSongStatus(song.firebaseKey)} className="focus:outline-none">
+          {song.played ? (
+            <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+          ) : (
+            <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+          )}
+        </button>
+        {!song.played && (
+          <button onClick={() => deleteRequest(song.firebaseKey)} className="focus:outline-none">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 hover:text-red-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
     </div>
   );
 };
