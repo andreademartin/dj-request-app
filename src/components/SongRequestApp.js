@@ -2,20 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update, remove } from '../utils/firebase';
-import * as AlertDialog from '@radix-ui/react-alert-dialog';
 
-const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => (
-  <AlertDialog.Root open={isOpen}>
-    <AlertDialog.Portal>
-      <AlertDialog.Overlay className="fixed inset-0 bg-black/50 animate-fade-in" />
-      <AlertDialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl animate-scale-up">
-        <AlertDialog.Title className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
+// Componente Dialog semplificato
+const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+      <div className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl animate-scale-up">
+        <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
           <AlertTriangle className="mr-2 text-orange-500" size={24} />
           Conferma eliminazione
-        </AlertDialog.Title>
-        <AlertDialog.Description className="text-gray-600 mb-6">
+        </h2>
+        <p className="text-gray-600 mb-6">
           Sei sicuro di voler eliminare questa canzone dalla lista delle richieste?
-        </AlertDialog.Description>
+        </p>
         <div className="flex justify-end space-x-3">
           <button
             onClick={onClose}
@@ -30,10 +31,10 @@ const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => (
             Elimina
           </button>
         </div>
-      </AlertDialog.Content>
-    </AlertDialog.Portal>
-  </AlertDialog.Root>
-);
+      </div>
+    </div>
+  );
+};
 
 const SongRequestApp = () => {
   const [search, setSearch] = useState('');
@@ -176,7 +177,6 @@ const SongRequestApp = () => {
     return `${minutes}:${seconds.padStart(2, '0')}`;
   };
 
-  // Ordina le richieste: prima non riprodotte (ordinate per order), poi riprodotte (ordinate per timestamp)
   const sortedRequests = [...requests].sort((a, b) => {
     if (a.played !== b.played) return a.played ? 1 : -1;
     if (!a.played && !b.played) return (a.order || 0) - (b.order || 0);
@@ -288,10 +288,10 @@ const SongRequestApp = () => {
                     <div className="text-sm text-purple-600">{song.artist}</div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                  <div className="text-sm text-purple-400">
+                    <div className="text-sm text-purple-400">
                       {formatDuration(song.duration)}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center space-x-2">
                       {!song.played && (
                         <>
                           <button
@@ -310,7 +310,7 @@ const SongRequestApp = () => {
                           </button>
                         </>
                       )}
-                      <button 
+   <button 
                         onClick={() => toggleSongStatus(song.firebaseKey)}
                         className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
                       >
