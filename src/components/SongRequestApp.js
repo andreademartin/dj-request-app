@@ -150,7 +150,7 @@ const SongRequestApp = () => {
         <div className="relative inline-block">
           <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Peppone's Hits on Demand
+            Peppone&apos;s Hits on Demand
           </h1>
           <Sparkles className="absolute -top-6 -right-6 text-yellow-500 animate-bounce" size={24} />
         </div>
