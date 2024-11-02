@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle } from 'lucide-react';
+import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update, remove } from '../utils/firebase';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 import * as AlertDialog from '@radix-ui/react-alert-dialog';
 
 const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => (
@@ -131,12 +130,32 @@ const SongRequestApp = () => {
     setDeleteDialog({ isOpen: true, songKey: firebaseKey });
   };
 
+  const moveSong = async (firebaseKey, direction) => {
+    const currentSong = requests.find(r => r.firebaseKey === firebaseKey);
+    if (!currentSong || currentSong.played) return;
+
+    const unplayedSongs = requests.filter(s => !s.played)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    
+    const currentIndex = unplayedSongs.findIndex(s => s.firebaseKey === firebaseKey);
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (newIndex < 0 || newIndex >= unplayedSongs.length) return;
+
+    const updates = {};
+    updates[`requests/${firebaseKey}/order`] = unplayedSongs[newIndex].order;
+    updates[`requests/${unplayedSongs[newIndex].firebaseKey}/order`] = currentSong.order;
+
+    const dbRef = ref(database);
+    await update(dbRef, updates);
+  };
+
   const addRequest = async (song) => {
     if (requests.some(req => req.id === song.id)) {
       return;
     }
 
-    const maxOrder = Math.max(0, ...requests.map(r => r.order || 0));
+    const maxOrder = Math.max(0, ...requests.filter(r => !r.played).map(r => r.order || 0));
     const requestsRef = ref(database, 'requests');
     await push(requestsRef, {
       ...song,
@@ -149,26 +168,6 @@ const SongRequestApp = () => {
     setSuggestions([]);
     setShowAddAnimation(true);
     setTimeout(() => setShowAddAnimation(false), 1000);
-  };
-
-  const handleDragEnd = async (result) => {
-    if (!result.destination) return;
-
-    const items = Array.from(requests);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    // Aggiorna gli ordini
-    const updates = {};
-    items.forEach((item, index) => {
-      if (!item.played) { // Aggiorna solo le canzoni non riprodotte
-        updates[`requests/${item.firebaseKey}/order`] = index;
-      }
-    });
-
-    // Aggiorna Firebase
-    const dbRef = ref(database);
-    await update(dbRef, updates);
   };
 
   const formatDuration = (ms) => {
@@ -205,7 +204,7 @@ const SongRequestApp = () => {
         <div className="relative inline-block">
           <PartyPopper className="absolute -top-6 -left-6 text-yellow-500 animate-bounce" size={24} />
           <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-            Peppone's Hits on Demand
+            Peppone&apos;s Hits on Demand
           </h1>
           <Sparkles className="absolute -top-6 -right-6 text-yellow-500 animate-bounce" size={24} />
         </div>
@@ -275,26 +274,112 @@ const SongRequestApp = () => {
               <p>Nessuna richiesta ancora...</p>
             </div>
           ) : (
-            <DragDropContext onDragEnd={handleDragEnd}>
-              <Droppable droppableId="songs">
-                {(provided) => (
-                  <div 
-                    {...provided.droppableProps}
-                    ref={provided.innerRef}
-                    className="space-y-3"
-                  >
-                    {sortedRequests.map((song, index) => (
-                      <Draggable 
-                        key={song.firebaseKey} 
-                        draggableId={song.firebaseKey} 
-                        index={index}
-                        isDragDisabled={song.played}
+            <div className="space-y-3">
+              {sortedRequests.map((song, index) => (
+                <div
+                  key={song.firebaseKey}
+                  className={`flex items-center p-3 bg-white/80 rounded-xl shadow-sm border border-purple-100 transform transition-all duration-300 hover:scale-102 hover:shadow-md ${
+                    song.played ? 'opacity-60' : ''
+                  }`}
+                >
+                  <img src={song.cover} alt={song.title} className="w-12 h-12 rounded-lg shadow-sm object-cover" />
+                  <div className="ml-3 flex-1">
+                    <div className="font-medium text-purple-900">{song.title}</div>
+                    <div className="text-sm text-purple-600">{song.artist}</div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                  <div className="text-sm text-purple-400">
+                      {formatDuration(song.duration)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {!song.played && (
+                        <>
+                          <button
+                            onClick={() => moveSong(song.firebaseKey, 'up')}
+                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
+                            disabled={index === 0 || requests.filter(r => !r.played)[0].firebaseKey === song.firebaseKey}
+                          >
+                            <ChevronUp size={16} />
+                          </button>
+                          <button
+                            onClick={() => moveSong(song.firebaseKey, 'down')}
+                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
+                            disabled={index === requests.filter(r => !r.played).length - 1}
+                          >
+                            <ChevronDown size={16} />
+                          </button>
+                        </>
+                      )}
+                      <button 
+                        onClick={() => toggleSongStatus(song.firebaseKey)}
+                        className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
                       >
-                        {(provided) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`flex items-center p-3 bg-white/80 rounded-xl shadow-sm border border-purple-100 transform transition-all duration-300 hover:scale-102 hover:shadow-md ${
-                              song.played ? 'opacity-60' : ''
-                            }`}
+                        {song.played ? (
+                          <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+                        ) : (
+                          <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
+                        )}
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(song.firebaseKey)}
+                        className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showAddAnimation && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+          <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
+        </div>
+      )}
+
+      <DeleteConfirmDialog 
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
+        onConfirm={() => deleteSong(deleteDialog.songKey)}
+      />
+
+      <style jsx global>{`
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        
+        .animate-gradient {
+          background-size: 200% 200%;
+          animation: gradient 15s ease infinite;
+        }
+        
+        .animate-scale-up {
+          animation: scale-up 0.5s ease-out forwards;
+        }
+        
+        @keyframes scale-up {
+          0% { transform: scale(0); opacity: 0; }
+          70% { transform: scale(1.2); opacity: 0.7; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default SongRequestApp;
