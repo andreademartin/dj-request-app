@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Music2, Clock, Sparkles, PartyPopper, CheckCircle2, Clock3, X, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { getSpotifyToken, searchSpotifyTracks } from '../utils/spotify';
 import { database, ref, push, onValue, update, remove } from '../utils/firebase';
@@ -6,24 +6,31 @@ import { database, ref, push, onValue, update, remove } from '../utils/firebase'
 const DeleteConfirmDialog = ({ isOpen, onClose, onConfirm }) => {
   if (!isOpen) return null;
 
+  const handleClick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const handleConfirm = (e) => {
+    e.preventDefault();
     e.stopPropagation();
     onConfirm();
   };
 
   const handleClose = (e) => {
+    e.preventDefault();
     e.stopPropagation();
     onClose();
   };
 
   return (
     <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] animate-fade-in"
+      className="fixed inset-0 flex items-center justify-center z-[200] bg-black/50"
       onClick={handleClose}
     >
       <div 
-        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl animate-scale-up"
-        onClick={e => e.stopPropagation()}
+        className="bg-white rounded-xl p-6 max-w-md w-[90%] shadow-xl relative"
+        onClick={handleClick}
       >
         <h2 className="text-xl font-semibold text-purple-900 mb-2 flex items-center">
           <AlertTriangle className="mr-2 text-orange-500" size={24} />
@@ -82,6 +89,8 @@ const SongRequestApp = () => {
           order: value.order || 0
         }));
         setRequests(requestsArray);
+      } else {
+        setRequests([]);
       }
     });
   }, []);
@@ -118,48 +127,63 @@ const SongRequestApp = () => {
     return () => clearTimeout(timeoutId);
   }, [search, accessToken]);
 
-  const moveSong = async (firebaseKey, direction) => {
-    const currentSong = requests.find(r => r.firebaseKey === firebaseKey);
+  const moveSong = useCallback(async (firebaseKey, direction) => {
+    const songs = [...requests];
+    const currentSong = songs.find(s => s.firebaseKey === firebaseKey);
     if (!currentSong || currentSong.played) return;
 
-    const unplayedSongs = requests
+    const unplayedSongs = songs
       .filter(s => !s.played)
-      .sort((a, b) => a.order - b.order);
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
 
     const currentIndex = unplayedSongs.findIndex(s => s.firebaseKey === firebaseKey);
-    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
 
-    if (swapIndex < 0 || swapIndex >= unplayedSongs.length) return;
+    if (targetIndex < 0 || targetIndex >= unplayedSongs.length) return;
+
+    const targetSong = unplayedSongs[targetIndex];
+    const currentOrder = currentSong.order || 0;
+    const targetOrder = targetSong.order || 0;
 
     const updates = {};
-    const newOrder = unplayedSongs[swapIndex].order;
-    const currentOrder = currentSong.order;
-
-    updates[`requests/${firebaseKey}/order`] = newOrder;
-    updates[`requests/${unplayedSongs[swapIndex].firebaseKey}/order`] = currentOrder;
+    updates[`/requests/${currentSong.firebaseKey}/order`] = targetOrder;
+    updates[`/requests/${targetSong.firebaseKey}/order`] = currentOrder;
 
     try {
       await update(ref(database), updates);
     } catch (error) {
       console.error('Errore nello spostamento:', error);
     }
-  };
+  }, [requests]);
 
-  const deleteSong = async () => {
-    try {
-      if (!deleteDialog.songKey) return;
-      const songRef = ref(database, `requests/${deleteDialog.songKey}`);
-      await remove(songRef);
-      setDeleteDialog({ isOpen: false, songKey: null });
-    } catch (error) {
-      console.error('Errore nella cancellazione:', error);
-    }
-  };
-
-  const handleDelete = (firebaseKey, e) => {
+  const handleDelete = useCallback((firebaseKey, e) => {
+    e.preventDefault();
     e.stopPropagation();
     setDeleteDialog({ isOpen: true, songKey: firebaseKey });
-  };
+  }, []);
+
+  const deleteSong = useCallback(async () => {
+    if (!deleteDialog.songKey) return;
+    
+    try {
+      const songRef = ref(database, `requests/${deleteDialog.songKey}`);
+      await remove(songRef);
+    } catch (error) {
+      console.error('Errore nella cancellazione:', error);
+    } finally {
+      setDeleteDialog({ isOpen: false, songKey: null });
+    }
+  }, [deleteDialog.songKey]);
+
+  const toggleSongStatus = useCallback(async (firebaseKey, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const songRef = ref(database, `requests/${firebaseKey}`);
+    const song = requests.find(r => r.firebaseKey === firebaseKey);
+    if (song) {
+      await update(songRef, { played: !song.played });
+    }
+  }, [requests]);
 
   const loadMore = () => {
     const nextPage = page + 1;
@@ -169,14 +193,6 @@ const SongRequestApp = () => {
     setSuggestions(newSuggestions);
     setPage(nextPage);
     setHasMore(end < allSuggestions.length);
-  };
-
-  const toggleSongStatus = async (firebaseKey) => {
-    const songRef = ref(database, `requests/${firebaseKey}`);
-    const song = requests.find(r => r.firebaseKey === firebaseKey);
-    if (song) {
-      await update(songRef, { played: !song.played });
-    }
   };
 
   const addRequest = async (song) => {
@@ -211,6 +227,8 @@ const SongRequestApp = () => {
     return (b.timestamp || 0) - (a.timestamp || 0);
   });
 
+  const unplayedSongs = requests.filter(r => !r.played);
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-b from-purple-50 to-pink-50">
       <div className="fixed top-0 left-0 right-0 bottom-0 w-full h-full -z-10">
@@ -241,53 +259,51 @@ const SongRequestApp = () => {
 
       <div className="max-w-md mx-auto p-4 space-y-6">
         <div className="relative z-50">
-          <div className="relative transform transition-all duration-300 hover:scale-102">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 text-purple-400" size={20} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Cerca una canzone su Spotify..."
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-lg text-purple-900 placeholder-purple-400"
-              />
-            </div>
-
-            {suggestions.length > 0 && (
-              <div className="absolute w-full mt-2 bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-purple-100 z-50 overflow-hidden animate-fade-in">
-                <div className="max-h-80 overflow-y-auto">
-                  {suggestions.map(song => (
-                    <div
-                      key={song.id}
-                      className="flex items-center p-3 hover:bg-purple-50 cursor-pointer transition-all duration-300"
-                      onClick={() => addRequest(song)}
-                    >
-                      <img 
-                        src={song.cover} 
-                        alt={song.title} 
-                        className="w-12 h-12 rounded-lg shadow-sm object-cover"
-                      />
-                      <div className="ml-3 flex-1">
-                        <div className="font-medium text-purple-900">{song.title}</div>
-                        <div className="text-sm text-purple-600">{song.artist}</div>
-                      </div>
-                      <div className="text-sm text-purple-400">
-                        {formatDuration(song.duration)}
-                      </div>
-                    </div>
-                  ))}
-                  {hasMore && (
-                    <button
-                      onClick={loadMore}
-                      className="w-full py-2 text-center text-purple-600 hover:text-purple-800 font-medium bg-purple-50 hover:bg-purple-100 transition-colors"
-                    >
-                      {loading ? 'Caricamento...' : 'Mostra altri'}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
+          <div className="relative">
+            <Search className="absolute left-3 top-3 text-purple-400" size={20} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Cerca una canzone su Spotify..."
+              className="w-full pl-10 pr-4 py-3 rounded-xl border border-purple-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 bg-white/80 backdrop-blur-sm transition-all duration-300 hover:shadow-lg text-purple-900 placeholder-purple-400"
+            />
           </div>
+
+          {suggestions.length > 0 && (
+            <div className="absolute w-full mt-2 bg-white/90 backdrop-blur-sm rounded-xl shadow-xl border border-purple-100 z-50 overflow-hidden animate-fade-in">
+              <div className="max-h-80 overflow-y-auto">
+                {suggestions.map(song => (
+                  <div
+                    key={song.id}
+                    className="flex items-center p-3 hover:bg-purple-50 cursor-pointer transition-all duration-300"
+                    onClick={() => addRequest(song)}
+                  >
+                    <img 
+                      src={song.cover} 
+                      alt={song.title} 
+                      className="w-12 h-12 rounded-lg shadow-sm object-cover"
+                    />
+                    <div className="ml-3 flex-1">
+                      <div className="font-medium text-purple-900">{song.title}</div>
+                      <div className="text-sm text-purple-600">{song.artist}</div>
+                    </div>
+                    <div className="text-sm text-purple-400">
+                      {formatDuration(song.duration)}
+                    </div>
+                  </div>
+                ))}
+                {hasMore && (
+                  <button
+                    onClick={loadMore}
+                    className="w-full py-2 text-center text-purple-600 hover:text-purple-800 font-medium bg-purple-50 hover:bg-purple-100 transition-colors"
+                  >
+                    {loading ? 'Caricamento...' : 'Mostra altri'}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="relative z-40 bg-white/60 backdrop-blur-sm rounded-xl p-4 shadow-lg border border-purple-100">
@@ -321,93 +337,101 @@ const SongRequestApp = () => {
                     </div>
                     <div className="flex items-center space-x-2">
                       {!song.played && (
-                        <div className="flex items-center">
+                        <>
                           <button
-                            onClick={() => moveSong(song.firebaseKey, 'up')}
-                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
-                            disabled={index === 0 || requests.filter(r => !r.played)[0].firebaseKey === song.firebaseKey}
-                            >
-                              <ChevronUp size={16} />
-                            </button>
-                            <button
-                              onClick={() => moveSong(song.firebaseKey, 'down')}
-                              className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors disabled:opacity-50"
-                              disabled={index === requests.filter(r => !r.played).length - 1}
-                            >
-                              <ChevronDown size={16} />
-                            </button>
-                          </div>
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              moveSong(song.firebaseKey, 'up');
+                            }}
+                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors"
+                            disabled={index === unplayedSongs.findIndex(s => s.firebaseKey === song.firebaseKey)}
+                          >
+                            <ChevronUp size={16} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              moveSong(song.firebaseKey, 'down');
+                            }}
+                            className="p-1 rounded-lg hover:bg-purple-100 text-purple-500 transition-colors"
+                            disabled={index === unplayedSongs.length - 1}
+                          >
+                            <ChevronDown size={16} />
+                          </button>
+                        </>
+                      )}
+                      <button 
+                        onClick={(e) => toggleSongStatus(song.firebaseKey, e)}
+                        className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
+                      >
+                        {song.played ? (
+                          <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
+                        ) : (
+                          <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
                         )}
-                        <button 
-                          onClick={(e) => toggleSongStatus(song.firebaseKey)}
-                          className="p-1 rounded-lg hover:bg-purple-100 focus:outline-none"
-                        >
-                          {song.played ? (
-                            <CheckCircle2 className="text-green-500 hover:text-green-600 transition-colors" size={20} />
-                          ) : (
-                            <Clock3 className="text-orange-500 hover:text-orange-600 transition-colors" size={20} />
-                          )}
-                        </button>
-                        <button 
-                          onClick={(e) => handleDelete(song.firebaseKey, e)}
-                          className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
-                        >
-                          <X size={20} />
-                        </button>
-                      </div>
+                      </button>
+                      <button 
+                        onClick={(e) => handleDelete(song.firebaseKey, e)}
+                        className="p-1 rounded-lg hover:bg-red-100 text-red-500 hover:text-red-600 transition-colors"
+                      >
+                        <X size={20} />
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-  
-        {showAddAnimation && (
-          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-            <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
-          </div>
-        )}
-  
-        <DeleteConfirmDialog 
-          isOpen={deleteDialog.isOpen}
-          onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
-          onConfirm={deleteSong}
-        />
-  
-        <style jsx global>{`
-          @keyframes gradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-          }
-          
-          .animate-gradient {
-            background-size: 200% 200%;
-            animation: gradient 15s ease infinite;
-          }
-          
-          .animate-scale-up {
-            animation: scale-up 0.5s ease-out forwards;
-          }
-          
-          @keyframes scale-up {
-            0% { transform: scale(0); opacity: 0; }
-            70% { transform: scale(1.2); opacity: 0.7; }
-            100% { transform: scale(1); opacity: 0; }
-          }
-          
-          .animate-fade-in {
-            animation: fade-in 0.3s ease-out forwards;
-          }
-          
-          @keyframes fade-in {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-          }
-        `}</style>
       </div>
-    );
-  };
-  
-  export default SongRequestApp;
+
+      {showAddAnimation && (
+        <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[150]">
+          <PartyPopper className="text-yellow-500 animate-scale-up" size={48} />
+        </div>
+      )}
+
+      <DeleteConfirmDialog 
+        isOpen={deleteDialog.isOpen}
+        onClose={() => setDeleteDialog({ isOpen: false, songKey: null })}
+        onConfirm={deleteSong}
+      />
+
+      <style jsx global>{`
+        @keyframes gradient {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        
+        .animate-gradient {
+          background-size: 200% 200%;
+          animation: gradient 15s ease infinite;
+        }
+        
+        .animate-scale-up {
+          animation: scale-up 0.5s ease-out forwards;
+        }
+        
+        @keyframes scale-up {
+          0% { transform: scale(0); opacity: 0; }
+          70% { transform: scale(1.2); opacity: 0.7; }
+          100% { transform: scale(1); opacity: 0; }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        @keyframes fade-in {
+          from { opacity: 0; transform: translateY(-10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default SongRequestApp;
